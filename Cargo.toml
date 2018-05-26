@@ -1,0 +1,7 @@
+[package]
+name = "solataire"
+version = "0.1.0"
+authors = ["Luke"]
+
+[dependencies]
+rand = "*"
