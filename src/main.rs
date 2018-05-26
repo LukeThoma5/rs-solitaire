@@ -6,11 +6,35 @@ extern crate rand;
 use rand::{thread_rng, Rng};
 
 #[derive(Debug, Clone, Copy)]
-enum Card {
-    Diamond(u8),
-    Spade(u8),
-    Heart(u8),
-    Club(u8),
+enum CardSuit {
+    Diamond,
+    Spade,
+    Heart,
+    Club,
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CardType {
+    Red,
+    Black,
+}
+#[derive(Debug, Clone, Copy)]
+struct Card {
+    value: u8,
+    suit: CardSuit,
+    card_type: CardType,
+}
+
+impl Card {
+    fn new(value: u8, suit: CardSuit) -> Card {
+        Card {
+            value,
+            suit,
+            card_type: match suit {
+                CardSuit::Club | CardSuit::Spade => CardType::Black,
+                _ => CardType::Red,
+            },
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -49,17 +73,15 @@ impl Playfield {
         }
 
         let mut cards = Vec::with_capacity(52);
-        for value in 1..=13 {
-            cards.push(Card::Club(value));
-        }
-        for value in 1..=13 {
-            cards.push(Card::Heart(value));
-        }
-        for value in 1..=13 {
-            cards.push(Card::Diamond(value));
-        }
-        for value in 1..=13 {
-            cards.push(Card::Spade(value));
+        for suit in vec![
+            CardSuit::Club,
+            CardSuit::Diamond,
+            CardSuit::Heart,
+            CardSuit::Spade,
+        ] {
+            for value in 1..=13 {
+                cards.push(Card::new(value, suit));
+            }
         }
 
         rng.shuffle(&mut cards);
@@ -80,25 +102,44 @@ impl Playfield {
             club: Vec::with_capacity(13),
             diamond: Vec::with_capacity(13),
             hand_index: 0,
-        } 
+        }
     }
 
-    fn move_cards(&mut self, col_from_index: usize, card_index: usize, destination: usize) -> Result<(), Box<std::option::NoneError>> {
+    fn move_cards(
+        &mut self,
+        col_from_index: usize,
+        card_index: usize,
+        destination: usize,
+    ) -> Result<(), Box<std::option::NoneError>> {
         let mut move_column = self.cols.get(col_from_index)?;
 
-        let move_card = move_column.visible.get(
-            move_column.visible.len()-card_index)?;
-        
+        let move_card = move_column
+            .visible
+            .get(move_column.visible.len() - card_index)?;
+
         let destination_card = self.cols.get(destination)?.visible.last();
 
-        match (move_card, destination_card) {
-            (Card::Club(v), None) | (Card::Diamond(v), None) | (Card::Heart(v), None) | (Card::Spade(v), None) if *v == 13 => {
-                println!("move card");
-            },
-            
-            _ => {}
-        }
-        
+        let allowed = match (move_card, destination_card) {
+            (Card { value: 13, .. }, None) => true,
+            (
+                Card {
+                    card_type: start_type,
+                    value,
+                    ..
+                },
+                Some(Card {
+                    card_type: destination_type,
+                    value: destination_value,
+                    ..
+                }),
+            ) if *destination_value == value + 1 =>
+            {
+                *start_type != *destination_type
+            }
+
+            _ => false,
+        };
+
         Ok(())
     }
 
