@@ -227,11 +227,11 @@ impl Playfield {
 
     fn hand_to_column(&mut self, column: usize) -> Result<(), GameError> {
         {
-            let mut card = self.hand.last()?;
+            let card = self.hand.last()?;
 
-            let mut column = self.cols.get(column)?;
+            let column = self.cols.get(column)?;
 
-            let mut destination = column.visible.back();
+            let destination = column.visible.back();
 
             let allowed = Playfield::is_allowed_move(card, &destination);
 
@@ -253,19 +253,23 @@ impl Playfield {
 
     fn print(&self) {
         let print_card = |card: Option<&Card>| match card {
-                    Some(card) => print!("| {} {:2.0} |", 
-                    match card.suit {
-                        CardSuit::Heart => "♥",
-                        CardSuit::Spade => "♠",
-                        CardSuit::Diamond => "♦",
-                        CardSuit::Club => "♣"
-                    }
-                    , card.value),
-                    _ => print!("| None |"),
-                };
-        // println!("{:?}", self.hand);
+            Some(card) => print!(
+                "| {} {:2.0} |",
+                match card.suit {
+                    CardSuit::Heart => "♥",
+                    CardSuit::Spade => "♠",
+                    CardSuit::Diamond => "♦",
+                    CardSuit::Club => "♣",
+                },
+                card.value
+            ),
+            _ => print!("| None |"),
+        };
         print!("\n\n");
-        self.hand.iter().take(3).for_each(|card| print_card(Some(card)));
+        self.hand
+            .iter()
+            .take(3)
+            .for_each(|card| print_card(Some(card)));
         print!("    ");
         print_card(self.heart.last());
         print_card(self.diamond.last());
@@ -276,18 +280,12 @@ impl Playfield {
         for layer in 0..5 {
             for col in &self.cols {
                 print_card(col.visible.iter().skip(layer).next());
-                // match col.visible.iter().skip(layer).next() {
-                //     Some(card) => print!("| {:?} {:?} |", card.suit, card.value),
-                //     _ => print!("| None |"),
-                // }
             }
             print!(" \r\n")
         }
     }
 
-    fn column_to_bucket(&mut self, column: usize, 
-     ) -> Result<(), GameError> {
-        
+    fn column_to_bucket(&mut self, column: usize) -> Result<(), GameError> {
         let column = self.cols.get_mut(column)?;
         let bucket: &mut Vec<Card>;
         {
@@ -296,9 +294,9 @@ impl Playfield {
                 CardSuit::Heart => &mut self.heart,
                 CardSuit::Club => &mut self.club,
                 CardSuit::Diamond => &mut self.diamond,
-                CardSuit::Spade => &mut self.spade
+                CardSuit::Spade => &mut self.spade,
             };
-            
+
             let destination_card = bucket.last();
             if !match destination_card {
                 Some(dest) => dest.value + 1 == move_card.value,
@@ -311,11 +309,31 @@ impl Playfield {
         bucket.push(column.visible.pop_back()?);
         Ok(())
     }
+
+    fn bucket_to_column(&mut self, column: usize, bucketSuit: CardSuit) -> Result<(), GameError> {
+        let column = self.cols.get_mut(column)?;
+        let bucket: &mut Vec<Card>;
+        {
+            bucket = match bucketSuit {
+                CardSuit::Heart => &mut self.heart,
+                CardSuit::Club => &mut self.club,
+                CardSuit::Diamond => &mut self.diamond,
+                CardSuit::Spade => &mut self.spade,
+            };
+            let destination_card = column.visible.back();
+            let move_card = bucket.last()?;
+
+            if !Playfield::is_allowed_move(move_card, &destination_card) {
+                return Err(GameError::Generic);
+            }
+        }
+
+        column.visible.push_back(bucket.pop()?);
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), GameError> {
-    println!("Hello world");
-
     let mut field = Playfield::new();
 
     // println!("{:?}", field.cols);
@@ -335,6 +353,10 @@ fn main() -> Result<(), GameError> {
         .visible
         .push_back(Card::new(1, CardSuit::Heart));
 
+    field.cols[5]
+        .visible
+        .push_back(Card::new(2, CardSuit::Club));
+
     field.draw_hand();
     field.print();
     field.move_cards(1, 1, 0).unwrap();
@@ -350,6 +372,9 @@ fn main() -> Result<(), GameError> {
     field.column_to_bucket(2).unwrap();
     field.print();
     field.column_to_bucket(2).unwrap();
+    field.print();
+
+    field.bucket_to_column(5, CardSuit::Heart).unwrap();
     field.print();
     Ok(())
 }
