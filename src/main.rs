@@ -264,15 +264,20 @@ impl Playfield {
         }
     }
 
-    fn column_to_bucket(&mut self, column: usize) -> Result<(), GameError> {
+    fn column_to_bucket(&mut self, column: usize, 
+     ) -> Result<(), GameError> {
+        
         let column = self.cols.get_mut(column)?;
-        let bucket = &mut self.heart;
+        let bucket: &mut Vec<Card>;
         {
             let move_card = column.visible.back()?;
-            let suit = CardSuit::Heart;
-            if move_card.suit != suit {
-                return Err(GameError::Generic);
-            }
+            bucket = match move_card.suit {
+                CardSuit::Heart => &mut self.heart,
+                CardSuit::Club => &mut self.club,
+                CardSuit::Diamond => &mut self.diamond,
+                CardSuit::Spade => &mut self.spade
+            };
+            
             let destination_card = bucket.last();
             if !match destination_card {
                 Some(dest) => dest.value + 1 == move_card.value,
@@ -305,6 +310,10 @@ fn main() -> Result<(), GameError> {
         .visible
         .push_back(Card::new(12, CardSuit::Heart));
 
+    field.cols[2]
+        .visible
+        .push_back(Card::new(1, CardSuit::Heart));
+
     field.draw_hand();
     field.print();
     field.move_cards(1, 1, 0).unwrap();
@@ -314,7 +323,12 @@ fn main() -> Result<(), GameError> {
     field.print();
 
     field.hand.pop()?;
-    field.hand_to_column(1);
+    field.hand_to_column(1).unwrap();
+    field.print();
+
+    field.column_to_bucket(2).unwrap();
+    field.print();
+    field.column_to_bucket(2).unwrap();
     field.print();
     Ok(())
 }
