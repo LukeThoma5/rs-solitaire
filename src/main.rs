@@ -4,14 +4,38 @@
 #![feature(try_trait)]
 extern crate rand;
 use rand::{thread_rng, Rng};
-
-#[derive(Debug, Clone, Copy)]
+use std::collections::LinkedList;
+use std::error::Error;
+use std::fmt;
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum CardSuit {
     Diamond,
     Spade,
     Heart,
     Club,
 }
+
+#[derive(Debug, Clone, Copy)]
+enum GameError {
+    Generic,
+}
+
+impl fmt::Display for GameError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
+impl Error for GameError {}
+
+impl From<std::option::NoneError> for GameError {
+    fn from(x: std::option::NoneError) -> GameError {
+        GameError::Generic
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum CardType {
     Red,
@@ -51,15 +75,15 @@ struct Playfield {
 
 #[derive(Debug)]
 struct Column {
-    hidden: Vec<Card>,
-    visible: Vec<Card>,
+    hidden: LinkedList<Card>,
+    visible: LinkedList<Card>,
 }
 
 impl Column {
     fn new() -> Column {
         Column {
-            hidden: vec![],
-            visible: vec![],
+            hidden: LinkedList::new(),
+            visible: LinkedList::new(),
         }
     }
 }
@@ -84,19 +108,19 @@ impl Playfield {
             }
         }
 
-        rng.shuffle(&mut cards);
+        // rng.shuffle(&mut cards);
         let mut iter = cards.into_iter();
         for iteration in 0..7 {
-            columns[iteration].visible.push(iter.next().unwrap());
+            columns[iteration].visible.push_back(iter.next().unwrap());
             for other in iteration + 1..7 {
-                columns[other].hidden.push(iter.next().unwrap());
+                columns[other].hidden.push_back(iter.next().unwrap());
             }
         }
 
         Playfield {
             cols: columns,
             hand: vec![],
-            backlog: iter.take(4).collect(),
+            backlog: iter.collect(),
             heart: Vec::with_capacity(13),
             spade: Vec::with_capacity(13),
             club: Vec::with_capacity(13),
@@ -110,16 +134,59 @@ impl Playfield {
         col_from_index: usize,
         card_index: usize,
         destination: usize,
-    ) -> Result<(), Box<std::option::NoneError>> {
-        let mut move_column = self.cols.get(col_from_index)?;
+    ) -> Result<(), GameError> {
+        let mut move_column: Option<&mut Column> = None;
+        let mut destination_column: Option<&mut Column> = None;
+        self.cols.iter_mut().enumerate().for_each(|(index, item)| {
+            if index == col_from_index {
+                move_column = Some(item)
+            } else if index == destination {
+                destination_column = Some(item)
+            }
+        });
 
-        let move_card = move_column
+        let (mut move_column, mut destination_column) = match (move_column, destination_column) {
+            (Some(mov), Some(dest)) => (mov, dest),
+            _ => return Err(GameError::Generic),
+        };
+
+        println!("Found columns");
+
+        let move_column_len = move_column.visible.len();
+
+        {
+            let move_card = move_column
+                .visible
+                .iter()
+                .skip(move_column_len - card_index - 1)
+                .next()?;
+
+            println!("Found move card {:?}", move_card);
+
+            let destination_card = destination_column.visible.back();
+
+            println!("Found destination {:?}", destination_card);
+
+            let allowed = Playfield::is_allowed_move(move_card, &destination_card);
+            println!("allowed {}", allowed);
+            if !allowed {
+                return Err(GameError::Generic);
+            }
+        }
+        println!("Adding items");
+        let mut to_add = move_column
             .visible
-            .get(move_column.visible.len() - card_index)?;
+            .split_off(move_column_len - card_index - 1);
 
-        let destination_card = self.cols.get(destination)?.visible.last();
+        println!("items to add {:?}", to_add);
 
-        let allowed = match (move_card, destination_card) {
+        destination_column.visible.append(&mut to_add);
+
+        Ok(())
+    }
+
+    fn is_allowed_move(move_card: &Card, destination_card: &Option<&Card>) -> bool {
+        match (move_card, destination_card) {
             (Card { value: 13, .. }, None) => true,
             (
                 Card {
@@ -138,11 +205,8 @@ impl Playfield {
             }
 
             _ => false,
-        };
-
-        Ok(())
+        }
     }
-
     fn draw_hand(&mut self) {
         match self.backlog.pop() {
             Some(card) => {
@@ -160,39 +224,97 @@ impl Playfield {
             }
         }
     }
+
+    fn hand_to_column(&mut self, column: usize) -> Result<(), GameError> {
+        {
+            let mut card = self.hand.last()?;
+
+            let mut column = self.cols.get(column)?;
+
+            let mut destination = column.visible.back();
+
+            let allowed = Playfield::is_allowed_move(card, &destination);
+
+            if !allowed {
+                return Err(GameError::Generic);
+            }
+        }
+        self.cols
+            .get_mut(column)?
+            .visible
+            .push_back(self.hand.pop()?);
+
+        if self.hand.len() == 0 {
+            self.draw_hand();
+        }
+
+        Ok(())
+    }
+
+    fn print(&self) {
+        println!("{:?}", self.hand);
+        for layer in 0..5 {
+            for col in &self.cols {
+                match col.visible.iter().skip(layer).next() {
+                    Some(card) => print!("| {:?} {:?} |", card.suit, card.value),
+                    _ => print!("| None |"),
+                }
+            }
+            print!(" \r\n")
+        }
+    }
+
+    fn column_to_bucket(&mut self, column: usize) -> Result<(), GameError> {
+        let column = self.cols.get_mut(column)?;
+        let bucket = &mut self.heart;
+        {
+            let move_card = column.visible.back()?;
+            let suit = CardSuit::Heart;
+            if move_card.suit != suit {
+                return Err(GameError::Generic);
+            }
+            let destination_card = bucket.last();
+            if !match destination_card {
+                Some(dest) => dest.value + 1 == move_card.value,
+                None => move_card.value == 1,
+            } {
+                return Err(GameError::Generic);
+            }
+        }
+
+        bucket.push(column.visible.pop_back()?);
+        Ok(())
+    }
 }
 
-fn main() -> () {
+fn main() -> Result<(), GameError> {
     println!("Hello world");
 
     let mut field = Playfield::new();
 
-    // println!("{:?}", field);
-    println!(
-        "{:?} {:?} {}",
-        field.backlog,
-        field.hand,
-        field.backlog.len()
-    );
+    // println!("{:?}", field.cols);
+
+    field.cols[0]
+        .visible
+        .push_back(Card::new(9, CardSuit::Diamond));
+    field.cols[1]
+        .visible
+        .push_back(Card::new(7, CardSuit::Heart));
+
+    field.cols[6]
+        .visible
+        .push_back(Card::new(12, CardSuit::Heart));
+
     field.draw_hand();
-    println!(
-        "{:?} {:?} {}",
-        field.backlog,
-        field.hand,
-        field.backlog.len()
-    );
-    field.draw_hand();
-    println!(
-        "{:?} {:?} {}",
-        field.backlog,
-        field.hand,
-        field.backlog.len()
-    );
-    field.draw_hand();
-    println!(
-        "{:?} {:?} {}",
-        field.backlog,
-        field.hand,
-        field.backlog.len()
-    );
+    field.print();
+    field.move_cards(1, 1, 0).unwrap();
+    field.print();
+
+    field.hand_to_column(6).unwrap();
+    field.print();
+
+    field.hand.pop()?;
+    field.hand_to_column(1);
+    field.print();
+    Ok(())
 }
