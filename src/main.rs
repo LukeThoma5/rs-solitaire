@@ -300,7 +300,10 @@ impl Playfield {
         print_card(self.spade.last());
         print_card(self.club.last());
         print!("\n\n");
-
+        for col in &self.cols {
+            print!("|  {:2.0}  |", col.hidden.len());
+        }
+        print!("\n");
         for layer in 0..5 {
             for col in &self.cols {
                 print_card(col.visible.iter().skip(layer).next());
