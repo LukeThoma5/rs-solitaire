@@ -126,7 +126,7 @@ impl Playfield {
             }
         }
 
-        // rng.shuffle(&mut cards);
+        rng.shuffle(&mut cards);
         let mut iter = cards.into_iter();
         for iteration in 0..7 {
             columns[iteration].visible.push_back(iter.next().unwrap());
@@ -171,6 +171,7 @@ impl Playfield {
         println!("Found columns");
 
         let move_column_len = move_column.visible.len();
+        if move_column_len == 0 { return Err(GameError::Generic); }
 
         {
             let move_card = move_column
@@ -304,7 +305,8 @@ impl Playfield {
             print!("|  {:2.0}  |", col.hidden.len());
         }
         print!("\n");
-        for layer in 0..5 {
+        let display_lines = self.cols.iter().map(|col| col.visible.len()).max().unwrap() + 1;
+        for layer in 0..display_lines {
             for col in &self.cols {
                 print_card(col.visible.iter().skip(layer).next());
             }
@@ -335,6 +337,34 @@ impl Playfield {
 
         bucket.push(column.visible.pop_back()?);
         column.reveal();
+        Ok(())
+    }
+
+    fn hand_to_bucket(&mut self) -> Result<(), GameError> {
+        
+        {
+            let bucket: &mut Vec<Card>;
+        {
+            let move_card = self.hand.last()?;
+            bucket = match move_card.suit {
+                CardSuit::Heart => &mut self.heart,
+                CardSuit::Club => &mut self.club,
+                CardSuit::Diamond => &mut self.diamond,
+                CardSuit::Spade => &mut self.spade,
+            };
+
+            let destination_card = bucket.last();
+            if !match destination_card {
+                Some(dest) => dest.value + 1 == move_card.value,
+                None => move_card.value == 1,
+            } {
+                return Err(GameError::Generic);
+            }
+        }
+
+        bucket.push(self.hand.pop()?);
+        }
+        if self.hand.len() == 0 { self.draw_hand();}
         Ok(())
     }
 
@@ -390,6 +420,7 @@ fn make_move(field: &mut Playfield) -> Result<(), GameError> {
         }
         (Some(&"draw"), ..) => field.draw_hand(),
         (Some(&"exit"), ..) => std::process::exit(0),
+        (Some(&"hand"), Some(&"bucket"), ..) => field.hand_to_bucket()?,
         (Some(&"hand"), Some(column), ..) => field.hand_to_column(column.parse()?)?,
         (Some(&"bucket"), Some(&"to"), Some(column), ..) => {
             field.column_to_bucket(column.parse()?)?
