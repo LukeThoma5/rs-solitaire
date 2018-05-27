@@ -252,13 +252,34 @@ impl Playfield {
     }
 
     fn print(&self) {
-        println!("{:?}", self.hand);
+        let print_card = |card: Option<&Card>| match card {
+                    Some(card) => print!("| {} {:2.0} |", 
+                    match card.suit {
+                        CardSuit::Heart => "♥",
+                        CardSuit::Spade => "♠",
+                        CardSuit::Diamond => "♦",
+                        CardSuit::Club => "♣"
+                    }
+                    , card.value),
+                    _ => print!("| None |"),
+                };
+        // println!("{:?}", self.hand);
+        print!("\n\n");
+        self.hand.iter().take(3).for_each(|card| print_card(Some(card)));
+        print!("    ");
+        print_card(self.heart.last());
+        print_card(self.diamond.last());
+        print_card(self.spade.last());
+        print_card(self.club.last());
+        print!("\n\n");
+
         for layer in 0..5 {
             for col in &self.cols {
-                match col.visible.iter().skip(layer).next() {
-                    Some(card) => print!("| {:?} {:?} |", card.suit, card.value),
-                    _ => print!("| None |"),
-                }
+                print_card(col.visible.iter().skip(layer).next());
+                // match col.visible.iter().skip(layer).next() {
+                //     Some(card) => print!("| {:?} {:?} |", card.suit, card.value),
+                //     _ => print!("| None |"),
+                // }
             }
             print!(" \r\n")
         }
