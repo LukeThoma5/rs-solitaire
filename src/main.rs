@@ -206,6 +206,19 @@ impl Playfield {
         Ok(())
     }
 
+    fn auto_fill(&mut self) -> () {
+        let mut cont = true;
+        while cont {
+            cont = false;
+            for column in 0..7 {
+                if let Ok(_) = self.column_to_bucket(column) {
+                    cont = true;
+                } 
+            }
+            while let Ok(_) = self.hand_to_bucket() { cont = true; }
+        }
+    }
+
     fn is_allowed_move(move_card: &Card, destination_card: &Option<&Card>) -> bool {
         match (move_card, destination_card) {
             (Card { value: 13, .. }, None) => true,
@@ -436,6 +449,7 @@ fn make_move(field: &mut Playfield) -> Result<(), GameError> {
             },
         )?,
         (Some(&"cheat"), Some(&"pop"), ..) => {field.backlog.push(field.hand.pop()?);},
+        (Some(&"auto"), ..) => { field.auto_fill();}
         _ => {}
     }
 
@@ -445,6 +459,7 @@ fn make_move(field: &mut Playfield) -> Result<(), GameError> {
 fn main() -> Result<(), GameError> {
     let mut field = Playfield::new();
     field.draw_hand();
+
     loop {
         println!("{:?}", field.hand);
         match make_move(&mut field) {
