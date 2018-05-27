@@ -86,6 +86,12 @@ impl Column {
             visible: LinkedList::new(),
         }
     }
+
+    fn reveal(&mut self) -> () {
+        if self.visible.len() == 0 && self.hidden.len() > 0 {
+            self.visible.push_front(self.hidden.pop_back().unwrap());
+        }
+    }
 }
 
 impl Playfield {
@@ -181,6 +187,8 @@ impl Playfield {
         println!("items to add {:?}", to_add);
 
         destination_column.visible.append(&mut to_add);
+
+        move_column.reveal();
 
         Ok(())
     }
@@ -307,14 +315,15 @@ impl Playfield {
         }
 
         bucket.push(column.visible.pop_back()?);
+        column.reveal();
         Ok(())
     }
 
-    fn bucket_to_column(&mut self, column: usize, bucketSuit: CardSuit) -> Result<(), GameError> {
+    fn bucket_to_column(&mut self, column: usize, bucket_suit: CardSuit) -> Result<(), GameError> {
         let column = self.cols.get_mut(column)?;
         let bucket: &mut Vec<Card>;
         {
-            bucket = match bucketSuit {
+            bucket = match bucket_suit {
                 CardSuit::Heart => &mut self.heart,
                 CardSuit::Club => &mut self.club,
                 CardSuit::Diamond => &mut self.diamond,
@@ -359,22 +368,9 @@ fn main() -> Result<(), GameError> {
 
     field.draw_hand();
     field.print();
-    field.move_cards(1, 1, 0).unwrap();
-    field.print();
-
-    field.hand_to_column(6).unwrap();
-    field.print();
-
-    field.hand.pop()?;
-    field.hand_to_column(1).unwrap();
-    field.print();
+    field.column_to_bucket(2).unwrap();
 
     field.column_to_bucket(2).unwrap();
-    field.print();
-    field.column_to_bucket(2).unwrap();
-    field.print();
-
-    field.bucket_to_column(5, CardSuit::Heart).unwrap();
     field.print();
     Ok(())
 }
