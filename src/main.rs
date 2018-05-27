@@ -36,6 +36,18 @@ impl From<std::option::NoneError> for GameError {
     }
 }
 
+impl From<std::num::ParseIntError> for GameError {
+    fn from(x: std::num::ParseIntError) -> GameError {
+        GameError::Generic
+    }
+}
+
+impl From<std::io::Error> for GameError {
+    fn from(x: std::io::Error) -> GameError {
+        GameError::Generic
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum CardType {
     Red,
@@ -276,7 +288,11 @@ impl Playfield {
         print!("\n\n");
         self.hand
             .iter()
+            .rev()
             .take(3)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
             .for_each(|card| print_card(Some(card)));
         print!("    ");
         print_card(self.heart.last());
@@ -340,37 +356,70 @@ impl Playfield {
         column.visible.push_back(bucket.pop()?);
         Ok(())
     }
+
+    fn has_won(&self) -> bool {
+        self.heart.len() == 13
+            && self.diamond.len() == 13
+            && self.club.len() == 13
+            && self.spade.len() == 13
+    }
+}
+
+fn make_move(field: &mut Playfield) -> Result<(), GameError> {
+    use std::io::stdin;
+
+    field.print();
+
+    let mut command = String::new();
+    stdin().read_line(&mut command)?;
+
+    let tokens: Vec<_> = command.trim().split(' ').collect();
+
+    println!("{:?}", tokens);
+
+    match (tokens.get(0), tokens.get(1), tokens.get(2), tokens.get(3)) {
+        (Some(&"mov"), Some(start_column), Some(start_index), Some(destination_column)) => {
+            field.move_cards(
+                start_column.parse()?,
+                start_index.parse()?,
+                destination_column.parse()?,
+            )?;
+        }
+        (Some(&"draw"), ..) => field.draw_hand(),
+        (Some(&"exit"), ..) => std::process::exit(0),
+        (Some(&"hand"), Some(column), ..) => field.hand_to_column(column.parse()?)?,
+        (Some(&"bucket"), Some(&"to"), Some(column), ..) => {
+            field.column_to_bucket(column.parse()?)?
+        }
+        (Some(&"bucket"), Some(&"from"), Some(suit), Some(column)) => field.bucket_to_column(
+            column.parse()?,
+            match suit {
+                &"h" => CardSuit::Heart,
+                &"d" => CardSuit::Diamond,
+                &"c" => CardSuit::Club,
+                &"s" => CardSuit::Spade,
+                _ => return Err(GameError::Generic),
+            },
+        )?,
+        (Some(&"cheat"), Some(&"pop"), ..) => {field.backlog.push(field.hand.pop()?);},
+        _ => {}
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<(), GameError> {
     let mut field = Playfield::new();
-
-    // println!("{:?}", field.cols);
-
-    field.cols[0]
-        .visible
-        .push_back(Card::new(9, CardSuit::Diamond));
-    field.cols[1]
-        .visible
-        .push_back(Card::new(7, CardSuit::Heart));
-
-    field.cols[6]
-        .visible
-        .push_back(Card::new(12, CardSuit::Heart));
-
-    field.cols[2]
-        .visible
-        .push_back(Card::new(1, CardSuit::Heart));
-
-    field.cols[5]
-        .visible
-        .push_back(Card::new(2, CardSuit::Club));
-
     field.draw_hand();
-    field.print();
-    field.column_to_bucket(2).unwrap();
-
-    field.column_to_bucket(2).unwrap();
-    field.print();
+    loop {
+        println!("{:?}", field.hand);
+        match make_move(&mut field) {
+            Err(_) => println!("incorrect try again"),
+            _ => {}
+        }
+        if field.has_won() {
+            break;
+        }
+    }
     Ok(())
 }
